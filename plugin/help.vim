@@ -6,10 +6,11 @@
 " Date: 09/03/2003 (21:03)
 " Description: call man or perldoc -f or many other help system in dependent from context
 " Changes:
-" * 1.18  several bugfixes, added call apropos if man page not found.
-" * 1.17  support fvwm, muttrc filetype, many fixes...
-" * 1.17g new, extended implementation of help.vim (http://www.vim.org/scripts/script.php?script_id=561)
-" * 1.17b forked by help.vim,v 1.16 2002/01/05 19:58:38 from Slava Gorbanev, added support tcl/tk and many fixes
+" * 1.18-1 now support perdoc in win32 OS...
+" * 1.18   several bugfixes, added call apropos if man page not found.
+" * 1.17   support fvwm, muttrc filetype, many fixes...
+" * 1.17g  new, extended implementation of help.vim (http://www.vim.org/scripts/script.php?script_id=561)
+" * 1.17b  forked by help.vim,v 1.16 2002/01/05 19:58:38 from Slava Gorbanev, added support tcl/tk and many fixes
 " Installation: put this into your plugin directory (~/.vim/plugin)
 " Usage:
 " 	use <F1> by default or other key (if you remap it) to call Help(expand("<cword>"))
@@ -145,24 +146,36 @@ endfun
 fun! Perldoc(word)
     let move_to_pattern = ''
     let filetype = 'man'
+	if has("win32")
+		let perlop = 'perldoc perlop'
+	else
+		let perlop = 'man perlop'
+	endif
     if a:word =~ g:perl_builtin
 		let cmd = 'perldoc -f '.a:word
     elseif a:word =~# '^\(s\|m\|qr\)$'
-		let cmd = 'man perlop'
+		let cmd = perlop
 		let move_to_pattern = '/^ \+'.a:word.'\/PATTERN\//'
     elseif a:word =~# '^\(tr\|y\)$'
-		let cmd = 'man perlop'
+		let cmd = perlop
 		let move_to_pattern = '/^ \+'.a:word.'\/SEARCHLIST\//'
     elseif a:word =~# '^q[qxw]\=$'
-		let cmd = 'man perlop'
+		let cmd = perlop
 		let move_to_pattern = '/^ \+'.a:word.'\/STRING\//'
     elseif a:word =~# '^\(y\|tr\)$'
-		let cmd = 'man perlop'
+		let cmd = perlop
 		let move_to_pattern = '/^ \+'.a:word.'\/SEARCHLIST\//'
     else
-		let cmd = 'man -S 3perl:3pm:3 '.a:word
+		if has("win32")
+			let cmd = 'perldoc '.a:word
+		else
+			let cmd = 'man -S 3perl:3pm:3 '.a:word
+		endif
     endif
-    call OpenHelpWin(cmd." 2>/dev/null \|col -b\|uniq", filetype, a:word)
+	if !has("win32")
+		cmd = cmd . "  2>/dev/null \|col -b\|uniq"
+	endif
+    call OpenHelpWin(cmd, filetype, a:word)
     if move_to_pattern != ''
 		call GoToSection(move_to_pattern)
     endif
@@ -194,7 +207,7 @@ fun! Help(word)
     elseif &ft =~ 'perl'
 		call Perldoc(a:word)
 	elseif &ft =~ 'tcl'
-		call Man('3tcl:3tk', a:word)
+		call Man('3tcl:3tk:3', a:word)
 	elseif &ft =~ '^\(fvwm\|muttrc\)$'
 		call Man('1:5',&ft, a:word)
     elseif &ft =~ '^z\=sh'
