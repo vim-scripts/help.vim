@@ -1,21 +1,28 @@
 " vim:fdm=marker:commentstring="\ %s:
 " Name: help.vim ("help subsystem")
-" Version: 1.17
+" Version: 1.19
 " Authors: Slava Gorbanev (author  1.16 version) and 
 "          Nikolay Panov  (author >1.16 version)
 " Date: 09/03/2003 (21:03)
 " Description: call man or perldoc -f or many other help system in dependent from context
 " Changes:
-" * 1.18-1 now support perdoc in win32 OS...
-" * 1.18   several bugfixes, added call apropos if man page not found.
-" * 1.17   support fvwm, muttrc filetype, many fixes...
-" * 1.17g  new, extended implementation of help.vim (http://www.vim.org/scripts/script.php?script_id=561)
-" * 1.17b  forked by help.vim,v 1.16 2002/01/05 19:58:38 from Slava Gorbanev, added support tcl/tk and many fixes
+" * 1.20  now pydoc is supported
+" * 1.19  several bugfixes, impruvements and other...
+" * 1.18  several bugfixes, added call apropos if man page not found.
+" * 1.17  support fvwm, muttrc filetype, many fixes...
+" * 1.17g new, extended implementation of help.vim (http://www.vim.org/scripts/script.php?script_id=561)
+" * 1.17b forked by help.vim,v 1.16 2002/01/05 19:58:38 from Slava Gorbanev, added support tcl/tk and many fixes
 " Installation: put this into your plugin directory (~/.vim/plugin)
 " Usage:
 " 	use <F1> by default or other key (if you remap it) to call Help(expand("<cword>"))
 "	this function creating in half window buffer with contex-dependent
 "	manual (or other) page about word under corsor.
+"	You can use new commands now:
+"	 Man 	 	 something		the same as man into your system
+"	 Perldoc 	 something		the same as perldoc into your system
+"	 GoToSection something		try to find <something> section into window
+"	 Help		 something		try to show context-dependent help
+"	 Dict		 something		the same as dict into your system 
 " 
 "    By default in help-buffer set key-mapping:
 "    q           for exit (and ``Esc'' in GUI mode)
@@ -28,7 +35,7 @@
 "	for example for go to NAME section by N key call next command:
 "	map N :call GoToSection('NAME')
 "
-" 	Now support: sh, vim, perl, tcl/tk, C/C++, fvwm, muttrc and many other.
+" 	Now support: sh, vim, perl, python, tcl/tk, C/C++, fvwm, muttrc and many other.
 "
 " TODO nicier documentation (oh - my terrible english)...
 " TODO support many other language
@@ -41,6 +48,7 @@ let $MANPL='1100i' " no page breaks inside man pages
 
 command! -nargs=* Man			call Man(<f-args>)
 command! -nargs=1 Perldoc 		call Perldoc(<f-args>)
+command! -nargs=1 Pydoc 		call Pydoc(<f-args>)
 command! -nargs=1 GoToSection	call GoToSection(<f-args>)
 " }}}
 " {{{ Mappings
@@ -72,8 +80,7 @@ fun! OpenHelpWin(cmd, ft, ...)
 		let buf_name = 'Help'
     endif
     exe 'silent new' escape(buf_name, '\ ')
-    if version >= 600
-		setlocal modifiable buftype=nofile noswapfile
+    setlocal modifiable buftype=nofile noswapfile
     endif
     let &ft = a:ft
     exe "0r!".a:cmd
@@ -92,26 +99,23 @@ fun! OpenHelpWin(cmd, ft, ...)
 		exe 'resize' helpsize
     endif
     1
-    if version >= 600
-		" {{{ key-mapping and definition local parameter
-		noremap <buffer> <Space> <C-F>
-		noremap <buffer> <Backspace> <C-B>
-		noremap <buffer> o :only<CR>
-		noremap <buffer> q :bdel<CR>
-		noremap <buffer> D :call GoToSection('DESCRIPTION')<CR>
-		noremap <buffer> S :call GoToSection('SYN')<CR>
-		noremap <buffer> <C-Up> zM?^[A-Z]\+<CR>jzvztk0
-		noremap <buffer> <C-Down> zM/^[A-Z]\+<CR>jzvztk0
-		if has("gui_running")
-			noremap <buffer> <Esc> :bdel<CR>
-		endif
+    " {{{ key-mapping and definition local parameter
+    noremap <buffer> <Space> <C-F>
+    noremap <buffer> <Backspace> <C-B>
+    noremap <buffer> o :only<CR>
+    noremap <buffer> q :bdel<CR>
+    noremap <buffer> D :call GoToSection('DESCRIPTION')<CR>
+    noremap <buffer> S :call GoToSection('SYN')<CR>
+    noremap <buffer> <C-Up> zM?^[A-Z]\+<CR>jzvztk0
+    noremap <buffer> <C-Down> zM/^[A-Z]\+<CR>jzvztk0
+    if has("gui_running")
+        noremap <buffer> <Esc> :bdel<CR>
+    endif
 
-		setlocal foldmethod=indent
-		setlocal nohlsearch
-		setlocal nomodifiable
-		" }}}
-    else
-		set readonly
+    setlocal foldmethod=indent
+    setlocal nohlsearch
+    setlocal nomodifiable
+    " }}}
     endif
 endfun
 " }}}
@@ -142,40 +146,39 @@ fun! Dict(word)
 	normal G2kzvztk0
 endfun
 " }}}
+" {{{ The Pydoc(word) function gets a python documentation for word
+fun! Pydoc(word)
+    let move_to_pattern = ''
+    let filetype = 'man'
+    let cmd = 'pydoc '.a:word
+    call OpenHelpWin(cmd." 2>/dev/null", filetype, a:word)
+    if move_to_pattern != ''
+        call GoToSection(move_to_pattern)
+    endif
+endfun
+" }}}
 " {{{ The Perldoc(word) function gets a perl documentation for word
 fun! Perldoc(word)
     let move_to_pattern = ''
     let filetype = 'man'
-	if has("win32")
-		let perlop = 'perldoc perlop'
-	else
-		let perlop = 'man perlop'
-	endif
     if a:word =~ g:perl_builtin
 		let cmd = 'perldoc -f '.a:word
     elseif a:word =~# '^\(s\|m\|qr\)$'
-		let cmd = perlop
+		let cmd = 'man perlop'
 		let move_to_pattern = '/^ \+'.a:word.'\/PATTERN\//'
     elseif a:word =~# '^\(tr\|y\)$'
-		let cmd = perlop
+		let cmd = 'man perlop'
 		let move_to_pattern = '/^ \+'.a:word.'\/SEARCHLIST\//'
     elseif a:word =~# '^q[qxw]\=$'
-		let cmd = perlop
+		let cmd = 'man perlop'
 		let move_to_pattern = '/^ \+'.a:word.'\/STRING\//'
     elseif a:word =~# '^\(y\|tr\)$'
-		let cmd = perlop
+		let cmd = 'man perlop'
 		let move_to_pattern = '/^ \+'.a:word.'\/SEARCHLIST\//'
     else
-		if has("win32")
-			let cmd = 'perldoc '.a:word
-		else
-			let cmd = 'man -S 3perl:3pm:3 '.a:word
-		endif
+		let cmd = 'man -S 3perl:3pm:3 '.a:word
     endif
-	if !has("win32")
-		cmd = cmd . "  2>/dev/null \|col -b\|uniq"
-	endif
-    call OpenHelpWin(cmd, filetype, a:word)
+    call OpenHelpWin(cmd." 2>/dev/null \|col -b\|uniq", filetype, a:word)
     if move_to_pattern != ''
 		call GoToSection(move_to_pattern)
     endif
@@ -205,7 +208,9 @@ fun! Help(word)
     elseif &ft == 'c' || &ft == 'cpp'
 		call Man('2:3', a:word)
     elseif &ft =~ 'perl'
-		call Perldoc(a:word)
+        call Perldoc(a:word)
+    elseif &ft =~ 'python'
+		call Pydoc(a:word)
 	elseif &ft =~ 'tcl'
 		call Man('3tcl:3tk:3', a:word)
 	elseif &ft =~ '^\(fvwm\|muttrc\)$'
